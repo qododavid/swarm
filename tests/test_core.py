@@ -3,6 +3,9 @@ from swarm import Swarm, Agent
 from tests.mock_client import MockOpenAIClient, create_mock_response
 from unittest.mock import Mock
 import json
+from swarm.types import Result
+from swarm.types import ChatCompletionMessageToolCall, Function
+from openai import OpenAI
 
 DEFAULT_RESPONSE_CONTENT = "sample response content"
 
@@ -143,3 +146,33 @@ def test_handoff(mock_openai_client: MockOpenAIClient):
     assert response.agent == agent2
     assert response.messages[-1]["role"] == "assistant"
     assert response.messages[-1]["content"] == DEFAULT_RESPONSE_CONTENT
+
+def test_handle_function_result_with_result_object():
+    swarm_instance = Swarm(client=MockOpenAIClient())
+    result = Result(value="test value")
+    processed_result = swarm_instance.handle_function_result(result, debug=False)
+    assert processed_result == result
+
+
+def test_handle_tool_calls_missing_tool(mock_openai_client: MockOpenAIClient):
+    agent = Agent(name="Test Agent", functions=[])
+    tool_call = ChatCompletionMessageToolCall(
+        id="test_id",
+        function=Function(name="non_existent_tool", arguments=json.dumps({})),
+        type="function"
+    )
+    swarm_instance = Swarm(client=mock_openai_client)
+    response = swarm_instance.handle_tool_calls(
+        tool_calls=[tool_call],
+        functions=agent.functions,
+        context_variables={},
+        debug=True
+    )
+    assert len(response.messages) == 1
+    assert response.messages[0]["content"] == "Error: Tool non_existent_tool not found."
+
+
+def test_swarm_initialization_with_default_client():
+    swarm_instance = Swarm()
+    assert isinstance(swarm_instance.client, OpenAI)
+
